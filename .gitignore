@@ -1,0 +1,3 @@
+*.local
+*.local.zsh
+.DS_Store
