@@ -5,10 +5,14 @@ alias gcm='git commit -m'
 alias gco='git checkout'
 alias gcob='git checkout -b'
 alias gdiff='git diff'
+alias gf='git fetch'
+alias gfap='git fetch && git pull'
+alias gr='git rebase'
 alias grh='git reset --hard'
 alias gst='git status'
 
 # Shell
+alias code='cursor'
 alias cls='clear'
 alias zedit='nano ~/dotfiles/zsh/aliases.zsh'
 alias zrestart='source ~/.zshrc'
@@ -19,6 +23,9 @@ function zhelp() {
   echo ""
   echo "-- Git --"
   echo "  gdiff        git diff"
+  echo "  gf           git fetch"
+  echo "  gfap         git fetch && git pull"
+  echo "  gr           git rebase"
   echo "  gcl          git clone"
   echo "  gcm          git commit -m"
   echo "  gaa          git add ."
