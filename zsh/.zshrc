@@ -4,6 +4,12 @@ source ~/dotfiles/zsh/aliases.zsh
 # Prompt
 source ~/dotfiles/zsh/prompt.zsh
 
+# Dotfiles bin
+export PATH="$PATH:$HOME/dotfiles/bin"
+
+# Android
+export PATH="$PATH:$HOME/Library/Android/sdk/emulator"
+
 # Node
 export NODE_OPTIONS="--max-old-space-size=8192"
 

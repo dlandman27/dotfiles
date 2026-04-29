@@ -1,0 +1,502 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! command -v gum &>/dev/null; then
+  echo "sim requires gum (brew install gum)"
+  exit 1
+fi
+
+EMULATOR="$HOME/Library/Android/sdk/emulator/emulator"
+ADB="$HOME/Library/Android/sdk/platform-tools/adb"
+
+# ── Theme ─────────────────────────────────────────────────────────
+ACCENT=99        # lavender
+ACCENT2=141       # light purple
+DIM=240           # gray
+SUCCESS=78        # green
+WARN=214          # orange
+ERR=196           # red
+IOS_COLOR=39      # blue
+ANDROID_COLOR=114 # green
+BORDER_COLOR=60   # muted purple
+
+# ANSI helpers (no nesting issues)
+c_reset=$'\033[0m'
+c_bold=$'\033[1m'
+c_dim=$'\033[38;5;240m'
+c_green=$'\033[38;5;78m'
+c_red=$'\033[38;5;196m'
+c_warn=$'\033[38;5;214m'
+c_ios=$'\033[38;5;39m'
+c_android=$'\033[38;5;114m'
+c_accent=$'\033[38;5;99m'
+c_white=$'\033[38;5;255m'
+
+# ── Helpers ───────────────────────────────────────────────────────
+banner() {
+  echo ""
+  gum style \
+    --border rounded \
+    --border-foreground "$BORDER_COLOR" \
+    --padding "1 3" \
+    --margin "0 2" \
+    --align center \
+    --bold \
+    --foreground "$ACCENT" \
+    '  ___  _  __  __' \
+    ' / __|| ||  \/  |' \
+    ' \__ \| || |\/| |' \
+    ' |___/|_||_|  |_|' \
+    '' \
+    'Device Manager'
+}
+
+section() {
+  local color="$1"
+  local icon="$2"
+  local title="$3"
+  echo ""
+  gum style \
+    --border rounded \
+    --border-foreground "$color" \
+    --padding "0 2" \
+    --margin "0 2" \
+    --bold \
+    --foreground "$color" \
+    "$icon  $title"
+  echo ""
+}
+
+device_row() {
+  local name="$1"
+  local status="$2"
+  local id="$3"
+
+  if [[ "$status" == "Booted" || "$status" == "running" ]]; then
+    printf "    ${c_green}${c_bold}%-10s${c_reset}  ${c_white}%-38s${c_reset}  ${c_dim}%s${c_reset}\n" "RUNNING" "$name" "$id"
+  else
+    printf "    ${c_dim}%-10s${c_reset}  ${c_white}%-38s${c_reset}  ${c_dim}%s${c_reset}\n" "offline" "$name" "$id"
+  fi
+}
+
+success() { echo ""; echo "    ${c_green}${c_bold}✓ $1${c_reset}"; }
+warn()    { echo ""; echo "    ${c_warn}⚠ $1${c_reset}"; }
+fail()    { echo ""; echo "    ${c_red}✗ $1${c_reset}"; }
+empty()   { echo "    ${c_dim}No devices found${c_reset}"; }
+
+pause() {
+  echo ""
+  echo "    ${c_dim}Press any key to continue...${c_reset}"
+  read -rsn1
+}
+
+menu_choose() {
+  gum choose --cursor "  > " "$@"
+}
+
+menu_filter() {
+  gum filter \
+    --indicator ">" \
+    --prompt "> " \
+    --height 12 \
+    --placeholder "$1"
+}
+
+divider() {
+  echo "    ${c_dim}─────────────────────────────────────────────${c_reset}"
+}
+
+# ── iOS ───────────────────────────────────────────────────────────
+ios_parse_devices() {
+  local filter="${1:-}"
+  local devices=""
+  local pattern='^[[:space:]]+(.+) \(([A-F0-9-]{36})\) \(([^)]+)\)'
+  while IFS= read -r line; do
+    if [[ "$line" =~ $pattern ]]; then
+      local name="${BASH_REMATCH[1]}"
+      local udid="${BASH_REMATCH[2]}"
+      local status="${BASH_REMATCH[3]}"
+      name=$(echo "$name" | sed 's/[[:space:]]*$//')
+
+      if [[ -z "$filter" ]] || [[ "$status" == "$filter" ]]; then
+        devices+="${name}|${status}|${udid}"$'\n'
+      fi
+    fi
+  done < <(xcrun simctl list devices available 2>/dev/null)
+  echo "$devices" | sed '/^$/d'
+}
+
+ios_list_all() {
+  section "$IOS_COLOR" "" "All iOS Simulators"
+
+  local devices
+  devices=$(ios_parse_devices)
+  if [[ -z "$devices" ]]; then
+    empty
+  else
+    while IFS='|' read -r name status udid; do
+      device_row "$name" "$status" "$udid"
+    done <<< "$devices"
+  fi
+  pause
+}
+
+ios_list_running() {
+  section "$IOS_COLOR" "" "Running iOS Simulators"
+
+  local devices
+  devices=$(ios_parse_devices "Booted")
+  if [[ -z "$devices" ]]; then
+    empty
+  else
+    while IFS='|' read -r name status udid; do
+      device_row "$name" "$status" "$udid"
+    done <<< "$devices"
+  fi
+  pause
+}
+
+ios_start() {
+  section "$IOS_COLOR" "" "Start iOS Simulator"
+
+  local devices
+  devices=$(ios_parse_devices "Shutdown")
+  if [[ -z "$devices" ]]; then
+    warn "No available simulators to start."
+    pause
+    return
+  fi
+
+  local names
+  names=$(echo "$devices" | cut -d'|' -f1)
+
+  local choice
+  choice=$(echo "$names" | menu_filter "Search simulators...") || return
+
+  local udid
+  udid=$(echo "$devices" | grep "^${choice}|" | head -1 | cut -d'|' -f3)
+
+  if [[ -n "$udid" ]]; then
+    xcrun simctl boot "$udid"
+    open -a Simulator
+    success "Booted $choice"
+  else
+    fail "Could not find device."
+  fi
+  pause
+}
+
+ios_kill() {
+  section "$IOS_COLOR" "" "Kill iOS Simulator"
+
+  local devices
+  devices=$(ios_parse_devices "Booted")
+  if [[ -z "$devices" ]]; then
+    warn "No running simulators."
+    pause
+    return
+  fi
+
+  local names
+  names=$(echo "$devices" | cut -d'|' -f1)
+
+  local choice
+  choice=$(echo "$names" | menu_filter "Search running simulators...") || return
+
+  local udid
+  udid=$(echo "$devices" | grep "^${choice}|" | head -1 | cut -d'|' -f3)
+
+  if [[ -n "$udid" ]]; then
+    xcrun simctl shutdown "$udid"
+    success "Shut down $choice"
+  else
+    fail "Could not find device."
+  fi
+  pause
+}
+
+ios_kill_all() {
+  section "$IOS_COLOR" "" "Kill All iOS Simulators"
+
+  local devices
+  devices=$(ios_parse_devices "Booted")
+  if [[ -z "$devices" ]]; then
+    warn "No running simulators."
+    pause
+    return
+  fi
+
+  while IFS='|' read -r name status udid; do
+    device_row "$name" "$status" "$udid"
+  done <<< "$devices"
+  echo ""
+
+  if gum confirm --prompt.foreground "$WARN" "  Shut down all these simulators?"; then
+    xcrun simctl shutdown all
+    success "All simulators shut down."
+  fi
+  pause
+}
+
+ios_menu() {
+  while true; do
+    section "$IOS_COLOR" "" "iOS Simulators"
+
+    local running_count total_count
+    running_count=$(ios_parse_devices "Booted" | wc -l | tr -d ' ')
+    total_count=$(ios_parse_devices | wc -l | tr -d ' ')
+
+    printf "    ${c_dim}%-3s devices  |  ${c_ios}%-3s${c_dim} running${c_reset}\n" "$total_count" "$running_count"
+    echo ""
+
+    local action
+    action=$(menu_choose \
+      "  List all" \
+      "  List running" \
+      "  Start device" \
+      "  Kill device" \
+      "  Kill all" \
+      "" \
+      "  Back" \
+    ) || return
+
+    action=$(echo "$action" | sed 's/^[[:space:]]*//' | sed 's/^. //')
+
+    case "$action" in
+      "List all")      ios_list_all ;;
+      "List running")  ios_list_running ;;
+      "Start device")  ios_start ;;
+      "Kill device")   ios_kill ;;
+      "Kill all")      ios_kill_all ;;
+      "Back")          return ;;
+    esac
+  done
+}
+
+# ── Android ───────────────────────────────────────────────────────
+android_get_avds() {
+  [[ -x "$EMULATOR" ]] && "$EMULATOR" -list-avds 2>/dev/null || true
+}
+
+android_get_running() {
+  [[ -x "$ADB" ]] && "$ADB" devices 2>/dev/null | grep "emulator" | awk '{print $1}' || true
+}
+
+android_get_avd_name() {
+  local serial="$1"
+  [[ -x "$ADB" ]] && "$ADB" -s "$serial" emu avd name 2>/dev/null | head -1 || echo "$serial"
+}
+
+android_list_all() {
+  section "$ANDROID_COLOR" "" "All Android Emulators"
+
+  if [[ ! -x "$EMULATOR" ]]; then
+    fail "Emulator binary not found."
+    pause
+    return
+  fi
+
+  local avds running_serials
+  avds=$(android_get_avds)
+  running_serials=$(android_get_running)
+
+  if [[ -z "$avds" ]]; then
+    empty
+  else
+    local running_names=""
+    while IFS= read -r serial; do
+      [[ -z "$serial" ]] && continue
+      local name
+      name=$(android_get_avd_name "$serial")
+      running_names+="$name"$'\n'
+    done <<< "$running_serials"
+
+    while IFS= read -r avd; do
+      [[ -z "$avd" ]] && continue
+      if echo "$running_names" | grep -qx "$avd"; then
+        device_row "$avd" "Booted" "avd"
+      else
+        device_row "$avd" "Shutdown" "avd"
+      fi
+    done <<< "$avds"
+  fi
+  pause
+}
+
+android_list_running() {
+  section "$ANDROID_COLOR" "" "Running Android Emulators"
+
+  local running
+  running=$(android_get_running)
+  if [[ -z "$running" ]]; then
+    empty
+  else
+    while IFS= read -r serial; do
+      [[ -z "$serial" ]] && continue
+      local name
+      name=$(android_get_avd_name "$serial")
+      device_row "$name" "Booted" "$serial"
+    done <<< "$running"
+  fi
+  pause
+}
+
+android_start() {
+  section "$ANDROID_COLOR" "" "Start Android Emulator"
+
+  if [[ ! -x "$EMULATOR" ]]; then
+    fail "Emulator binary not found."
+    pause
+    return
+  fi
+
+  local avds
+  avds=$(android_get_avds)
+  if [[ -z "$avds" ]]; then
+    warn "No AVDs configured."
+    pause
+    return
+  fi
+
+  local choice
+  choice=$(echo "$avds" | menu_filter "Search emulators...") || return
+
+  if [[ -n "$choice" ]]; then
+    "$EMULATOR" -avd "$choice" &>/dev/null &
+    disown
+    success "Starting $choice"
+  fi
+  pause
+}
+
+android_kill() {
+  section "$ANDROID_COLOR" "" "Kill Android Emulator"
+
+  local running
+  running=$(android_get_running)
+  if [[ -z "$running" ]]; then
+    warn "No running emulators."
+    pause
+    return
+  fi
+
+  local options=""
+  while IFS= read -r serial; do
+    [[ -z "$serial" ]] && continue
+    local name
+    name=$(android_get_avd_name "$serial")
+    options+="${name} (${serial})"$'\n'
+  done <<< "$running"
+  options=$(echo "$options" | sed '/^$/d')
+
+  local choice
+  choice=$(echo "$options" | menu_filter "Search running emulators...") || return
+
+  local serial
+  serial=$(echo "$choice" | grep -oE 'emulator-[0-9]+')
+
+  if [[ -n "$serial" ]]; then
+    "$ADB" -s "$serial" emu kill 2>/dev/null
+    success "Killed $choice"
+  else
+    fail "Could not parse emulator."
+  fi
+  pause
+}
+
+android_kill_all() {
+  section "$ANDROID_COLOR" "" "Kill All Android Emulators"
+
+  local running
+  running=$(android_get_running)
+  if [[ -z "$running" ]]; then
+    warn "No running emulators."
+    pause
+    return
+  fi
+
+  while IFS= read -r serial; do
+    [[ -z "$serial" ]] && continue
+    local name
+    name=$(android_get_avd_name "$serial")
+    device_row "$name" "Booted" "$serial"
+  done <<< "$running"
+  echo ""
+
+  if gum confirm --prompt.foreground "$WARN" "  Kill all these emulators?"; then
+    while IFS= read -r serial; do
+      [[ -z "$serial" ]] && continue
+      "$ADB" -s "$serial" emu kill 2>/dev/null
+    done <<< "$running"
+    success "All emulators killed."
+  fi
+  pause
+}
+
+android_menu() {
+  while true; do
+    section "$ANDROID_COLOR" "" "Android Emulators"
+
+    local avd_count running_count
+    avd_count=$(android_get_avds | grep -c . || echo 0)
+    running_count=$(android_get_running | grep -c . || echo 0)
+
+    printf "    ${c_dim}%-3s devices  |  ${c_android}%-3s${c_dim} running${c_reset}\n" "$avd_count" "$running_count"
+    echo ""
+
+    local action
+    action=$(menu_choose \
+      "  List all" \
+      "  List running" \
+      "  Start device" \
+      "  Kill device" \
+      "  Kill all" \
+      "" \
+      "  Back" \
+    ) || return
+
+    action=$(echo "$action" | sed 's/^[[:space:]]*//' | sed 's/^. //')
+
+    case "$action" in
+      "List all")      android_list_all ;;
+      "List running")  android_list_running ;;
+      "Start device")  android_start ;;
+      "Kill device")   android_kill ;;
+      "Kill all")      android_kill_all ;;
+      "Back")          return ;;
+    esac
+  done
+}
+
+# ── Main ──────────────────────────────────────────────────────────
+main() {
+  while true; do
+    banner
+
+    local ios_running android_running
+    ios_running=$(ios_parse_devices "Booted" 2>/dev/null | wc -l | tr -d ' ')
+    android_running=$(android_get_running 2>/dev/null | grep -c . || echo 0)
+
+    echo ""
+    printf "    ${c_ios}%-2s${c_dim} iOS running  |  ${c_android}%-2s${c_dim} Android running${c_reset}\n" "$ios_running" "$android_running"
+    echo ""
+
+    local platform
+    platform=$(menu_choose \
+      "  iOS Simulators" \
+      "  Android Emulators" \
+      "" \
+      "  Quit" \
+    ) || exit 0
+
+    platform=$(echo "$platform" | sed 's/^[[:space:]]*//' | sed 's/^. //')
+
+    case "$platform" in
+      "iOS Simulators")     ios_menu ;;
+      "Android Emulators")  android_menu ;;
+      "Quit")               exit 0 ;;
+    esac
+  done
+}
+
+main
