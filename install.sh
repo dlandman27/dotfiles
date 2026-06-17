@@ -20,6 +20,7 @@ link() {
 }
 
 link "$DOTFILES/zsh/.zshrc" "$HOME/.zshrc"
+link "$DOTFILES/git/.gitconfig" "$HOME/.gitconfig"
 
 echo ""
 echo "Done. Run 'source ~/.zshrc' to reload."
