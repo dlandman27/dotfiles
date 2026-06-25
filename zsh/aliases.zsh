@@ -32,37 +32,59 @@ alias cls='clear'
 alias zedit='nano ~/dotfiles/zsh/aliases.zsh'
 alias zrestart='source ~/.zshrc'
 
+# Manage the dotfiles repo. Usage: dotfiles pull
+function dotfiles() {
+  case "$1" in
+    pull)
+      git -C ~/dotfiles pull && source ~/.zshrc && echo "dotfiles updated and reloaded"
+      ;;
+    *)
+      echo "usage: dotfiles pull"
+      return 1
+      ;;
+  esac
+}
+
 function zhelp() {
+  local title=$'\033[1;36m' header=$'\033[1;33m' cmd=$'\033[0;32m' reset=$'\033[0m'
   echo ""
-  echo "=== Custom Shell Commands ==="
+  echo "${title}=== Custom Shell Commands ===${reset}"
   echo ""
-  echo "-- Git --"
-  echo "  gdiff        git diff"
-  echo "  gf           git fetch"
-  echo "  gfo          git fetch origin"
-  echo "  gfap         git fetch && git pull"
-  echo "  gpull        git pull"
-  echo "  gpush        git push"
-  echo "  gr           git rebase"
-  echo "  gl           git log (graph, last 20)"
-  echo "  gcl          git clone"
-  echo "  gcm          git commit -m"
-  echo "  gaa          git add ."
-  echo "  gst          git status"
-  echo "  gco          git checkout"
-  echo "  gcob         git checkout -b"
-  echo "  gb           git branch"
-  echo "  gbd          git branch -D"
-  echo "  gss          git stash"
-  echo "  gsp          git stash pop"
-  echo "  grh          git reset --hard"
-  echo "  grb          git rebranch <branch> <base>: recreate <branch> off an updated <base>"
-  echo "  gblog        List recently checked-out branches (default 20)"
+  echo "${header}-- Git --${reset}"
+  echo "  ${cmd}gdiff${reset}        git diff"
+  echo "  ${cmd}gf${reset}           git fetch"
+  echo "  ${cmd}gfo${reset}          git fetch origin"
+  echo "  ${cmd}gfap${reset}         git fetch && git pull"
+  echo "  ${cmd}gpull${reset}        git pull"
+  echo "  ${cmd}gpush${reset}        git push"
+  echo "  ${cmd}gr${reset}           git rebase"
+  echo "  ${cmd}gl${reset}           git log (graph, last 20)"
+  echo "  ${cmd}gcl${reset}          git clone"
+  echo "  ${cmd}gcm${reset}          git commit -m"
+  echo "  ${cmd}gaa${reset}          git add ."
+  echo "  ${cmd}gst${reset}          git status"
+  echo "  ${cmd}gco${reset}          git checkout"
+  echo "  ${cmd}gcob${reset}         git checkout -b"
+  echo "  ${cmd}gb${reset}           git branch"
+  echo "  ${cmd}gbd${reset}          git branch -D"
+  echo "  ${cmd}gss${reset}          git stash"
+  echo "  ${cmd}gsp${reset}          git stash pop"
+  echo "  ${cmd}grh${reset}          git reset --hard"
+  echo "  ${cmd}grb${reset}          git rebranch <branch> <base>: recreate <branch> off an updated <base>"
+  echo "  ${cmd}gblog${reset}        List recently checked-out branches (default 20)"
   echo ""
-  echo "-- Shell --"
-  echo "  cls          Clear terminal"
-  echo "  zedit        Edit aliases in nano"
-  echo "  zrestart     Reload ~/.zshrc"
-  echo "  zhelp        Show this help menu"
+  echo "${header}-- AI (claude -p) --${reset}"
+  echo "  ${cmd}gcai${reset}         Generate a commit message from staged diff, confirm before committing"
+  echo "  ${cmd}ask${reset}          Ask Claude a one-off question; also works as a pipe target"
+  echo "  ${cmd}greview${reset}      Review current branch diff vs base (default beta) for bugs"
+  echo "  ${cmd}gprc${reset}         Push & open/edit a PR (default beta); optional Claude-drafted body (-a)"
+  echo "  ${cmd}explain${reset}      Explain piped error/output: <cmd> 2>&1 | explain"
+  echo ""
+  echo "${header}-- Shell --${reset}"
+  echo "  ${cmd}cls${reset}          Clear terminal"
+  echo "  ${cmd}zedit${reset}        Edit aliases in nano"
+  echo "  ${cmd}zrestart${reset}     Reload ~/.zshrc"
+  echo "  ${cmd}dotfiles pull${reset}  Pull latest dotfiles and reload"
+  echo "  ${cmd}zhelp${reset}        Show this help menu"
   echo ""
 }
