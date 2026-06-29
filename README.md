@@ -9,6 +9,7 @@ helpers, and a few CLI tools. Everything is symlinked into `$HOME` by
 ```sh
 git clone <repo-url> ~/dotfiles
 cd ~/dotfiles
+brew bundle              # install the tools below (optional)
 ./install.sh
 source ~/.zshrc
 ```
@@ -34,12 +35,16 @@ install.sh        # symlink installer
 
 ## Requirements
 
+`brew bundle` (from the repo root) installs everything in the [`Brewfile`](Brewfile):
+
 - **zsh** + **git** (macOS defaults)
 - [**Claude Code**](https://claude.com/claude-code) CLI (`claude`) — for the AI helpers
 - [**gh**](https://cli.github.com/) — for `gprc`
-- [**gum**](https://github.com/charmbracelet/gum) — for `sim` (`brew install gum`)
-- **rbenv**, **nvm**, Android SDK — referenced in `.zshrc` (optional; remove the
-  lines you don't use)
+- [**gum**](https://github.com/charmbracelet/gum) — for `sim`
+- **rbenv**, **nvm** — referenced in `.zshrc`
+
+The Android SDK (`emulator`, `adb`) for `sim` isn't in the Brewfile — install it
+via Android Studio. Remove any `.zshrc` lines for tools you don't use.
 
 ## Commands
 
