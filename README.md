@@ -96,3 +96,7 @@ Anything machine-specific stays out of git:
 
 Both patterns are covered by `.gitignore` (`*.local`, `*.local.zsh`), so secrets
 and per-machine tweaks never get committed.
+
+## License
+
+[MIT](LICENSE) — use it for whatever.
