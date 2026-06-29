@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash -n /Users/dylanlandman/cb-cli/cb)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(bash -n install.sh)",
+      "Bash(zsh -n zsh/ai.zsh)",
+      "Bash(zsh -n zsh/.zshrc)",
+      "Bash(zsh -n zsh/cb.local.zsh)",
+      "Bash(zsh -c 'source zsh/ai.zsh; typeset -f gprc >/dev/null && echo \"gprc OK\"; typeset -f _gprc_ai_body >/dev/null && echo \"_gprc_ai_body OK\"')"
+    ]
+  }
+}

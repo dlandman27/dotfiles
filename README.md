@@ -21,16 +21,18 @@ file already exists at either path, it's backed up to `*.bak` before linking.
 
 ```
 zsh/
-  .zshrc          # entrypoint — sources the modules below, sets PATH, rbenv/nvm
-  aliases.zsh     # git + shell aliases, dotfiles helper, zhelp menu
-  ai.zsh          # AI helpers backed by `claude -p`
-  prompt.zsh      # vcs_info-based prompt (user@host, cwd, git branch)
-  cb.local.zsh    # machine-local, gitignored (not committed)
+  .zshrc            # entrypoint — sources the modules below, sets PATH, loads plugins
+  history.zsh       # persistent, shared, de-duplicated history
+  aliases.zsh       # git + shell aliases, dotfiles helper, zhelp menu
+  ai.zsh            # AI helpers backed by `claude -p` (incl. gprc)
+  prompt.zsh        # vcs_info-based prompt (user@host, cwd, git branch)
+  cb.local.zsh      # machine-local, gitignored (not committed)
 git/
-  .gitconfig      # user, push.autoSetupRemote, rebranch alias
+  .gitconfig        # user, push.autoSetupRemote, core.excludesfile, rebranch alias
+  .gitignore_global # OS/editor cruft ignored in every repo
 bin/
-  sim             # gum TUI for managing iOS simulators / Android emulators
-install.sh        # symlink installer
+  sim               # gum TUI for managing iOS simulators / Android emulators
+install.sh          # symlink installer
 ```
 
 ## Requirements

@@ -23,6 +23,7 @@ link() {
 
 link "$DOTFILES/zsh/.zshrc" "$HOME/.zshrc"
 link "$DOTFILES/git/.gitconfig" "$HOME/.gitconfig"
+link "$DOTFILES/git/.gitignore_global" "$HOME/.gitignore_global"
 
 # Warn about tools the configs expect (install them with: brew bundle).
 missing=()

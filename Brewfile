@@ -5,7 +5,9 @@ brew "git"
 brew "gh"          # GitHub CLI — used by gprc
 
 # Shell tools
-brew "gum"         # TUI toolkit — used by bin/sim
+brew "gum"                     # TUI toolkit — used by bin/sim
+brew "zsh-autosuggestions"     # fish-style as-you-type command suggestions
+brew "zsh-syntax-highlighting" # colorizes the command line as you type
 
 # Version managers (referenced in zsh/.zshrc)
 brew "nvm"
