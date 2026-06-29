@@ -1,3 +1,6 @@
 *.local
 *.local.zsh
 .DS_Store
+
+# Claude Code machine-local settings (permissions etc.)
+.claude/settings.local.json
