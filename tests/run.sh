@@ -115,6 +115,13 @@ contains "list_themes includes built-ins" "robbyrussell" \
 contains "list_themes includes minimal" "minimal" \
   bash -c 'source bin/dot; list_themes'
 
+if have zsh; then
+  contains "cmd_definition resolves an alias" "git status" \
+    bash -c 'source bin/dot; cmd_definition gst'
+  contains "cmd_definition resolves a function" "gh pr" \
+    bash -c 'source bin/dot; cmd_definition gprc'
+fi
+
 # ── install.sh symlinking (sandboxed HOME) ────────────────────────
 group "install.sh"
 ok "links configs into a sandbox HOME" bash -c '
