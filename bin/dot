@@ -1,0 +1,361 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Resolve the repo root from this script's real location (follow symlinks).
+SELF="${BASH_SOURCE[0]}"
+while [ -L "$SELF" ]; do
+  link="$(readlink "$SELF")"
+  case "$link" in
+    /*) SELF="$link" ;;
+    *)  SELF="$(dirname "$SELF")/$link" ;;
+  esac
+done
+DOTFILES="$(cd "$(dirname "$SELF")/.." && pwd)"
+THEMES="$DOTFILES/zsh/themes"
+LOCAL_THEMES="$THEMES/local"
+SETTINGS="$DOTFILES/zsh/settings.local.zsh"
+
+# ── Theme ─────────────────────────────────────────────────────────
+ACCENT=99         # lavender
+DIM=240           # gray
+SUCCESS=78        # green
+WARN=214          # orange
+ERR=196           # red
+BORDER_COLOR=60   # muted purple
+
+c_reset=$'\033[0m'
+c_dim=$'\033[38;5;240m'
+c_green=$'\033[38;5;78m'
+c_warn=$'\033[38;5;214m'
+c_accent=$'\033[38;5;99m'
+
+# ── UI helpers ────────────────────────────────────────────────────
+banner() {
+  echo ""
+  gum style \
+    --border rounded --border-foreground "$BORDER_COLOR" \
+    --padding "1 4" --margin "0 2" --align center --bold \
+    --foreground "$ACCENT" \
+    '          __  ' \
+    '  /\/\   / /  ' \
+    '        / /   ' \
+    '       /_/  o ' \
+    '' \
+    '~/. dotfiles' \
+    'by dlandman27'
+}
+
+section() {
+  local color="$1" title="$2"
+  echo ""
+  gum style --border rounded --border-foreground "$color" \
+    --padding "0 2" --margin "0 2" --bold --foreground "$color" "$title"
+}
+
+choose() { gum choose --cursor "  > " "$@"; }
+
+pause() { echo; gum input --placeholder "press enter to continue" >/dev/null 2>&1 || true; }
+
+# ── Settings (gitignored zsh/settings.local.zsh) ──────────────────
+settings_get() {
+  local key="$1" default="${2:-}" val=""
+  [ -f "$SETTINGS" ] && val="$(grep -E "^${key}=" "$SETTINGS" 2>/dev/null | tail -1 | cut -d= -f2-)"
+  echo "${val:-$default}"
+}
+
+settings_set() {
+  local key="$1" val="$2"
+  mkdir -p "$(dirname "$SETTINGS")"
+  [ -f "$SETTINGS" ] || printf '# Written by `dot` — gitignored, machine-local.\n' > "$SETTINGS"
+  if grep -qE "^${key}=" "$SETTINGS"; then
+    sed -i.bak "s|^${key}=.*|${key}=${val}|" "$SETTINGS" && rm -f "$SETTINGS.bak"
+  else
+    printf '%s=%s\n' "$key" "$val" >> "$SETTINGS"
+  fi
+}
+
+clip() {
+  if command -v pbcopy &>/dev/null; then pbcopy
+  elif command -v wl-copy &>/dev/null; then wl-copy
+  elif command -v xclip &>/dev/null; then xclip -selection clipboard
+  else return 1; fi
+}
+
+# ── Themes ────────────────────────────────────────────────────────
+list_themes() {
+  { ls "$THEMES"/*.zsh 2>/dev/null || true; ls "$LOCAL_THEMES"/*.zsh 2>/dev/null || true; } \
+    | sed 's|.*/||; s|\.zsh$||' | sort -u
+}
+
+# Render a theme's prompt faithfully: run vcs_info inside this git repo so the
+# themed git segment populates, then expand the prompt escapes.
+render_prompt() {
+  local name="$1" file=""
+  for d in "$LOCAL_THEMES" "$THEMES"; do
+    [ -f "$d/$name.zsh" ] && { file="$d/$name.zsh"; break; }
+  done
+  [ -n "$file" ] || return 1
+  zsh -f -c "
+    autoload -Uz vcs_info; setopt prompt_subst
+    cd '$DOTFILES'
+    zstyle ':vcs_info:git:*' formats '(%b) '
+    RPROMPT=''
+    source '$file'
+    vcs_info
+    print -rP -- \"\$PROMPT\"
+  " 2>/dev/null
+}
+
+theme_select() {
+  section "$ACCENT" " Prompt theme"
+  local current themes choice
+  current="$(settings_get DOTFILES_THEME robbyrussell)"
+  themes="$(list_themes)"
+  echo "${c_dim}  current: ${c_green}${current}${c_reset}"
+  echo
+  choice="$(printf '%s\n' $themes | choose --header "Pick a theme:")" || return 0
+  [ -n "${choice:-}" ] || return 0
+  echo; echo "${c_accent}  preview:${c_reset}"; echo
+  render_prompt "$choice" | sed 's/^/    /'
+  echo
+  if gum confirm "Set theme to '$choice'?"; then
+    settings_set DOTFILES_THEME "$choice"
+    echo "${c_green}  set. run 'zrestart' or open a new shell to see it.${c_reset}"
+  fi
+  pause
+}
+
+AI_THEME_PROMPT='Write a zsh prompt theme as a self-contained snippet. Requirements:
+- Set the PROMPT variable (and optionally RPROMPT). prompt_subst is enabled.
+- Use zsh prompt escapes: %F{color}...%f for color (0-255), %~ cwd, %c basename, %n user, %m host, %# prompt char, %(?.OK.FAIL) for exit status, %* time.
+- For the git branch, reference ${vcs_info_msg_0_} in PROMPT. To style it, set: zstyle '\''0:vcs_info:git:*'\'' formats '\''...'\'' (use %b for branch name).
+- Do NOT call vcs_info, do NOT define precmd, do NOT autoload anything — the loader handles that.
+- Output ONLY the snippet (a few lines). No code fences, no commentary, no explanation.'
+
+theme_ai() {
+  section "$ACCENT" " Generate a theme with Claude"
+  if ! command -v claude &>/dev/null; then
+    echo "${c_warn}  claude CLI not found. Install Claude Code first.${c_reset}"; pause; return 0
+  fi
+  local name desc content out action
+  name="$(gum input --placeholder "theme name (e.g. sunset)")" || return 0
+  name="$(printf '%s' "$name" | tr ' ' '-' | tr -cd 'a-zA-Z0-9_-')"
+  [ -n "$name" ] || { echo "  need a name."; pause; return 0; }
+  desc="$(gum write --placeholder "Describe the prompt you want (colors, layout, symbols, one/two-line)...")" || return 0
+  [ -n "$desc" ] || { echo "  need a description."; pause; return 0; }
+
+  mkdir -p "$LOCAL_THEMES"
+  out="$LOCAL_THEMES/$name.zsh"
+  content="$(gum spin --spinner dot --title "Generating with Claude..." --show-output -- \
+    claude -p "$AI_THEME_PROMPT
+
+DESCRIPTION: $desc")" || { echo "${c_warn}  claude failed.${c_reset}"; pause; return 0; }
+
+  printf '# %s — AI-generated.\n%s\n' "$name" "$content" > "$out"
+  echo; echo "${c_accent}  preview:${c_reset}"; echo
+  render_prompt "$name" | sed 's/^/    /'
+  echo
+  action="$(choose "Keep & apply" "Keep only" "Regenerate" "Discard")" || action="Discard"
+  case "$action" in
+    "Keep & apply") settings_set DOTFILES_THEME "$name"; echo "${c_green}  saved + applied. run 'zrestart'.${c_reset}" ;;
+    "Keep only")    echo "${c_green}  saved to themes/local/$name.zsh${c_reset}" ;;
+    "Regenerate")   rm -f "$out"; theme_ai; return 0 ;;
+    *)              rm -f "$out"; echo "  discarded." ;;
+  esac
+  pause
+}
+
+theme_promote() {
+  section "$ACCENT" " Promote a local theme"
+  local locals choice
+  locals="$(ls "$LOCAL_THEMES"/*.zsh 2>/dev/null | sed 's|.*/||; s|\.zsh$||' || true)"
+  [ -n "$locals" ] || { echo "  no local (AI-generated) themes yet."; pause; return 0; }
+  choice="$(printf '%s\n' $locals | choose --header "Move which theme into the committed set?")" || return 0
+  [ -n "${choice:-}" ] || return 0
+  mv "$LOCAL_THEMES/$choice.zsh" "$THEMES/$choice.zsh"
+  echo "${c_green}  promoted $choice → zsh/themes/ (commit it via Manage › Update or git).${c_reset}"
+  pause
+}
+
+modules_menu() {
+  section "$ACCENT" " Modules"
+  local sel preselect=()
+  [ "$(settings_get DOTFILES_AUTOSUGGEST 1)" = 1 ] && preselect+=("autosuggestions")
+  [ "$(settings_get DOTFILES_HIGHLIGHT 1)" = 1 ] && preselect+=("syntax-highlighting")
+  [ "$(settings_get DOTFILES_HISTORY_SHARE 1)" = 1 ] && preselect+=("shared-history")
+  local selected_csv
+  selected_csv="$(IFS=,; echo "${preselect[*]:-}")"
+
+  sel="$(gum choose --no-limit --selected "$selected_csv" \
+    --header "Space toggles, enter saves (selected = ON):" \
+    "autosuggestions" "syntax-highlighting" "shared-history")" || return 0
+
+  case "$sel" in *autosuggestions*) settings_set DOTFILES_AUTOSUGGEST 1;; *) settings_set DOTFILES_AUTOSUGGEST 0;; esac
+  case "$sel" in *syntax-highlighting*) settings_set DOTFILES_HIGHLIGHT 1;; *) settings_set DOTFILES_HIGHLIGHT 0;; esac
+  case "$sel" in *shared-history*) settings_set DOTFILES_HISTORY_SHARE 1;; *) settings_set DOTFILES_HISTORY_SHARE 0;; esac
+  echo "${c_green}  saved. run 'zrestart' or open a new shell.${c_reset}"
+  pause
+}
+
+customize_menu() {
+  while true; do
+    section "$ACCENT" " Customize"
+    local c
+    c="$(choose "Prompt theme" "Generate theme (AI)" "Promote local theme" "Modules" "Back")" || return 0
+    case "$c" in
+      "Prompt theme")        theme_select ;;
+      "Generate theme (AI)") theme_ai ;;
+      "Promote local theme") theme_promote ;;
+      "Modules")             modules_menu ;;
+      *) return 0 ;;
+    esac
+  done
+}
+
+# ── Commands browser ──────────────────────────────────────────────
+GIT_CMDS='gst — git status
+gaa — git add .
+gcm — git commit -m
+gco — git checkout
+gcob — git checkout -b
+gl — git log (graph, last 20)
+gdiff — git diff
+gf — git fetch
+gfo — git fetch origin
+gfap — git fetch && git pull
+gpull — git pull
+gpush — git push
+gr — git rebase
+grh — git reset --hard
+grb — git rebranch <branch> <base>
+gb — git branch
+gbd — git branch -D
+gss — git stash
+gsp — git stash pop
+gblog — list recently checked-out branches'
+
+AI_CMDS='gcai — generate a commit message from staged diff, confirm before committing
+ask — ask Claude a one-off question; also works as a pipe target
+greview — review current branch diff vs base (default beta) for bugs
+gprc — push & open/edit a PR (default beta); -a for a Claude-drafted body
+explain — explain piped error/output: <cmd> 2>&1 | explain'
+
+SHELL_CMDS='cls — clear terminal
+zedit — edit aliases in nano
+zrestart — reload ~/.zshrc
+dotfiles — open this TUI
+dotfiles pull — pull latest dotfiles and reload
+dotfiles help — show command reference
+zhelp — show the help menu
+sim — manage iOS/Android simulators'
+
+browse_cmds() {
+  local list="$1" pick name
+  pick="$(printf '%s\n' "$list" | gum filter --placeholder "filter commands..." --header "Enter to copy the command name")" || return 0
+  [ -n "${pick:-}" ] || return 0
+  name="${pick%% —*}"
+  if printf '%s' "$name" | clip; then
+    echo "${c_green}  copied '$name' to clipboard.${c_reset}"
+  else
+    echo "  $pick"
+  fi
+  pause
+}
+
+commands_menu() {
+  while true; do
+    section "$ACCENT" " Commands"
+    local c
+    c="$(choose "Git" "AI" "Shell" "Full help (zhelp)" "Back")" || return 0
+    case "$c" in
+      Git)   browse_cmds "$GIT_CMDS" ;;
+      AI)    browse_cmds "$AI_CMDS" ;;
+      Shell) browse_cmds "$SHELL_CMDS" ;;
+      "Full help (zhelp)") zsh -ic zhelp 2>/dev/null || echo "  run 'zhelp' in your shell."; pause ;;
+      *) return 0 ;;
+    esac
+  done
+}
+
+# ── Manage ────────────────────────────────────────────────────────
+manage_status() {
+  section "$SUCCESS" " Status"
+  echo "${c_accent}  repo:${c_reset} $DOTFILES"
+  echo "${c_accent}  theme:${c_reset} $(settings_get DOTFILES_THEME robbyrussell)"
+  echo
+  echo "${c_accent}  git:${c_reset}"
+  git -C "$DOTFILES" status -sb 2>/dev/null | sed 's/^/    /'
+  echo
+  echo "${c_accent}  symlinks:${c_reset}"
+  for f in ~/.zshrc ~/.gitconfig ~/.gitignore_global; do
+    if [ -L "$f" ]; then echo "    ${c_green}ok${c_reset}   $f → $(readlink "$f")"
+    elif [ -e "$f" ]; then echo "    ${c_warn}file${c_reset} $f (not a symlink — run install.sh)"
+    else echo "    ${c_dim}none${c_reset} $f"; fi
+  done
+  echo
+  echo "${c_accent}  tools:${c_reset}"
+  for t in claude gh gum rbenv; do
+    if command -v "$t" &>/dev/null; then echo "    ${c_green}ok${c_reset}   $t"
+    else echo "    ${c_warn}miss${c_reset} $t"; fi
+  done
+  pause
+}
+
+manage_menu() {
+  while true; do
+    section "$SUCCESS" " Manage"
+    local c
+    c="$(choose "Update (pull + reload)" "Status" "Run install.sh" "Edit repo" "Back")" || return 0
+    case "$c" in
+      "Update (pull + reload)")
+        git -C "$DOTFILES" pull && echo "${c_green}  pulled. run 'zrestart' to reload this shell.${c_reset}"; pause ;;
+      "Status") manage_status ;;
+      "Run install.sh") bash "$DOTFILES/install.sh"; pause ;;
+      "Edit repo")
+        "${EDITOR:-$(command -v cursor || command -v code || echo vi)}" "$DOTFILES"; return 0 ;;
+      *) return 0 ;;
+    esac
+  done
+}
+
+help_screen() {
+  section "$ACCENT" " About"
+  cat <<EOF
+  dotfiles control center
+
+  Commands   browse your aliases/functions and copy them
+  Customize  pick a prompt theme, generate one with AI, toggle modules
+  Manage     update, check status, install, edit the repo
+
+  Launch with:  dot   ·   dotfiles
+  Repo:         $DOTFILES
+EOF
+  pause
+}
+
+# ── Main ──────────────────────────────────────────────────────────
+main_menu() {
+  clear
+  banner
+  while true; do
+    local c
+    c="$(choose "Commands" "Customize" "Manage" "Help" "Quit")" || exit 0
+    case "$c" in
+      Commands)  commands_menu ;;
+      Customize) customize_menu ;;
+      Manage)    manage_menu ;;
+      Help)      help_screen ;;
+      *) exit 0 ;;
+    esac
+  done
+}
+
+# Run the TUI only when executed directly — sourcing (e.g. tests) just loads
+# the functions above.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  if ! command -v gum &>/dev/null; then
+    echo "dot requires gum (brew install gum)"
+    exit 1
+  fi
+  main_menu
+fi

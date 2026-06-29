@@ -4,3 +4,6 @@
 
 # Claude Code machine-local settings (permissions etc.)
 .claude/settings.local.json
+
+# AI-generated prompt themes (personal, per-machine; promote via `dot` to commit)
+zsh/themes/local/

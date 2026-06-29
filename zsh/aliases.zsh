@@ -32,14 +32,23 @@ alias cls='clear'
 alias zedit='nano ~/dotfiles/zsh/aliases.zsh'
 alias zrestart='source ~/.zshrc'
 
-# Manage the dotfiles repo. Usage: dotfiles pull
+# Manage the dotfiles repo.
+#   dotfiles          open the control-center TUI (same as `dot`)
+#   dotfiles pull     pull latest and reload the shell
+#   dotfiles help     show the command reference (zhelp)
 function dotfiles() {
   case "$1" in
+    ""|ui|tui)
+      dot
+      ;;
     pull)
       git -C ~/dotfiles pull && source ~/.zshrc && echo "dotfiles updated and reloaded"
       ;;
+    help)
+      zhelp
+      ;;
     *)
-      echo "usage: dotfiles pull"
+      echo "usage: dotfiles [pull|help]  (no args opens the TUI)"
       return 1
       ;;
   esac
@@ -81,10 +90,14 @@ function zhelp() {
   echo "  ${cmd}explain${reset}      Explain piped error/output: <cmd> 2>&1 | explain"
   echo ""
   echo "${header}-- Shell --${reset}"
+  echo "  ${cmd}dot${reset}          Open the dotfiles control-center TUI"
+  echo "  ${cmd}dotfiles${reset}     Open the TUI (alias of dot)"
+  echo "  ${cmd}dotfiles pull${reset}  Pull latest dotfiles and reload"
+  echo "  ${cmd}dotfiles help${reset}  Show this help menu"
   echo "  ${cmd}cls${reset}          Clear terminal"
   echo "  ${cmd}zedit${reset}        Edit aliases in nano"
   echo "  ${cmd}zrestart${reset}     Reload ~/.zshrc"
-  echo "  ${cmd}dotfiles pull${reset}  Pull latest dotfiles and reload"
   echo "  ${cmd}zhelp${reset}        Show this help menu"
+  echo "  ${cmd}sim${reset}          Manage iOS/Android simulators"
   echo ""
 }

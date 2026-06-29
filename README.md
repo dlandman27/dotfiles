@@ -25,13 +25,18 @@ zsh/
   history.zsh       # persistent, shared, de-duplicated history
   aliases.zsh       # git + shell aliases, dotfiles helper, zhelp menu
   ai.zsh            # AI helpers backed by `claude -p` (incl. gprc)
-  prompt.zsh        # vcs_info-based prompt (user@host, cwd, git branch)
+  theme.zsh         # prompt-theme loader (reads $DOTFILES_THEME)
+  themes/           # ~20 self-contained prompt themes
+    local/          # AI-generated themes (gitignored; promote via `dot`)
   cb.local.zsh      # machine-local, gitignored (not committed)
 git/
   .gitconfig        # user, push.autoSetupRemote, core.excludesfile, rebranch alias
   .gitignore_global # OS/editor cruft ignored in every repo
 bin/
+  dot               # gum TUI control center (commands, customize, manage)
   sim               # gum TUI for managing iOS simulators / Android emulators
+tests/
+  run.sh            # zero-dependency test suite (make test)
 install.sh          # symlink installer
 ```
 
@@ -83,16 +88,48 @@ use the output — no REPL, no slash commands.
 
 | Command | What it does |
 |---------|--------------|
+| `dot` / `dotfiles` | Open the control-center TUI |
 | `dotfiles pull` | Pull the latest dotfiles and reload `~/.zshrc` |
+| `dotfiles help` | Show the full command menu (`zhelp`) |
 | `zedit` | Edit `aliases.zsh` |
 | `zrestart` | `source ~/.zshrc` |
-| `zhelp` | Show the full command menu |
+
+### `dot` — the control center
+
+A [gum](https://github.com/charmbracelet/gum)-based TUI (run `dot` or just
+`dotfiles`) with three sections:
+
+- **Commands** — browse your aliases/functions by category and copy them to the clipboard.
+- **Customize** — pick a prompt theme, **generate a new one with Claude**, promote a generated theme into the repo, and toggle modules (autosuggestions, syntax-highlighting, shared history).
+- **Manage** — update (pull + reload), check status (git, symlinks, tool availability), run `install.sh`, or open the repo in your editor.
+
+#### Prompt themes
+
+`zsh/themes/` holds ~20 self-contained themes (each just sets `PROMPT`). The
+active one is a single line in the gitignored `zsh/settings.local.zsh`:
+
+```sh
+DOTFILES_THEME=agnoster-lite
+```
+
+`theme.zsh` reads it at shell start. The `dot` TUI writes that line for you, and
+its **Generate theme (AI)** option pipes a description to `claude -p`, saves the
+result to the gitignored `zsh/themes/local/`, and previews it before you keep it.
 
 ### `sim`
 
-A [gum](https://github.com/charmbracelet/gum)-based TUI for managing
-simulators. List / start / kill iOS simulators (via `simctl`) and Android
-emulators (via `emulator` + `adb`). Just run `sim`.
+A gum-based TUI for managing simulators. List / start / kill iOS simulators (via
+`simctl`) and Android emulators (via `emulator` + `adb`). Just run `sim`.
+
+## Tests
+
+```sh
+make test        # or ./tests/run.sh
+```
+
+A zero-dependency bash suite covering script syntax, every prompt theme, the
+theme loader, the `dot` helper functions, `install.sh` symlinking, and git
+config.
 
 ## Local overrides
 
