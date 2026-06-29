@@ -34,15 +34,15 @@ banner() {
   echo ""
   gum style \
     --border rounded --border-foreground "$BORDER_COLOR" \
-    --padding "1 4" --margin "0 2" --align center --bold \
+    --padding "1 3" --margin "0 2" --align left --bold \
     --foreground "$ACCENT" \
-    '          __  ' \
-    '  /\/\   / /  ' \
-    '        / /   ' \
-    '       /_/  o ' \
+    '/\//  __    __      __  _____ __         ' \
+    ' //\/ _/_/___/ /___  / /_/ __(_) /__  _____' \
+    '    _/_// __  / __ \/ __/ /_/ / / _ \/ ___/' \
+    '  _/_/ / /_/ / /_/ / /_/ __/ / /  __(__  ) ' \
+    ' /_/   \__,_/\____/\__/_/ /_/_/\___/____/  ' \
     '' \
-    '~/. dotfiles' \
-    'by dlandman27'
+    '                              by dlandman27'
 }
 
 section() {
