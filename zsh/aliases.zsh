@@ -31,6 +31,7 @@ alias code='cursor'
 alias cls='clear'
 alias zedit='nano ~/dotfiles/zsh/aliases.zsh'
 alias zrestart='source ~/.zshrc'
+alias restart='exec zsh'
 
 # Manage the dotfiles repo.
 #   dotfiles          open the control-center TUI (same as `dot`)
@@ -96,7 +97,8 @@ function zhelp() {
   echo "  ${cmd}dotfiles help${reset}  Show this help menu"
   echo "  ${cmd}cls${reset}          Clear terminal"
   echo "  ${cmd}zedit${reset}        Edit aliases in nano"
-  echo "  ${cmd}zrestart${reset}     Reload ~/.zshrc"
+  echo "  ${cmd}zrestart${reset}     Reload ~/.zshrc (soft)"
+  echo "  ${cmd}restart${reset}      Restart the shell (exec zsh)"
   echo "  ${cmd}zhelp${reset}        Show this help menu"
   echo "  ${cmd}sim${reset}          Manage iOS/Android simulators"
   echo ""

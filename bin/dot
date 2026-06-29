@@ -280,7 +280,8 @@ explain — explain piped error/output: <cmd> 2>&1 | explain'
 
 SHELL_CMDS='cls — clear terminal
 zedit — edit aliases in nano
-zrestart — reload ~/.zshrc
+zrestart — reload ~/.zshrc (soft)
+restart — restart the shell (exec zsh)
 dotfiles — open this TUI
 dotfiles pull — pull latest dotfiles and reload
 dotfiles help — show command reference
