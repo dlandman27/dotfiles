@@ -120,6 +120,10 @@ if have zsh; then
     bash -c 'source bin/dot; cmd_definition gst'
   contains "cmd_definition resolves a function" "gh pr" \
     bash -c 'source bin/dot; cmd_definition gprc'
+
+  # fzf preview hooks: the script re-execs itself to render a row.
+  ok "__render_theme prints a prompt" bash -c '[ -n "$(bash bin/dot __render_theme minimal)" ]'
+  contains "__render_cmd resolves a command" "git status" bash bin/dot __render_cmd gst
 fi
 
 # ── install.sh symlinking (sandboxed HOME) ────────────────────────

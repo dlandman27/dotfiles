@@ -47,7 +47,8 @@ install.sh          # symlink installer
 - **zsh** + **git** (macOS defaults)
 - [**Claude Code**](https://claude.com/claude-code) CLI (`claude`) — for the AI helpers
 - [**gh**](https://cli.github.com/) — for `gprc`
-- [**gum**](https://github.com/charmbracelet/gum) — for `sim`
+- [**gum**](https://github.com/charmbracelet/gum) — for `dot` and `sim`
+- [**fzf**](https://github.com/junegunn/fzf) — live preview in `dot` (optional)
 - **rbenv**, **nvm** — referenced in `.zshrc`
 
 The Android SDK (`emulator`, `adb`) for `sim` isn't in the Brewfile — install it
@@ -99,9 +100,12 @@ use the output — no REPL, no slash commands.
 A [gum](https://github.com/charmbracelet/gum)-based TUI (run `dot` or just
 `dotfiles`) with three sections:
 
-- **Commands** — browse your aliases/functions by category and copy them to the clipboard.
-- **Customize** — pick a prompt theme, **generate a new one with Claude**, promote a generated theme into the repo, and toggle modules (autosuggestions, syntax-highlighting, shared history).
+- **Commands** — browse your aliases/functions; with [`fzf`](https://github.com/junegunn/fzf) installed you get a **live preview of what each one runs** as you scroll. Copy the name or the full definition.
+- **Customize** — pick a prompt theme (live preview as you scroll), **build a new one in an interactive Claude session**, promote a generated theme into the repo, and toggle modules (autosuggestions, syntax-highlighting, shared history).
 - **Manage** — update (pull + reload), check status (git, symlinks, tool availability), run `install.sh`, or open the repo in your editor.
+
+> Live previews use `fzf`'s preview pane. Without `fzf`, `dot` falls back to a
+> gum chooser that previews after you select.
 
 #### Prompt themes
 
@@ -112,9 +116,13 @@ active one is a single line in the gitignored `zsh/settings.local.zsh`:
 DOTFILES_THEME=agnoster-lite
 ```
 
-`theme.zsh` reads it at shell start. The `dot` TUI writes that line for you, and
-its **Generate theme (AI)** option pipes a description to `claude -p`, saves the
-result to the gitignored `zsh/themes/local/`, and previews it before you keep it.
+`theme.zsh` reads it at shell start. The `dot` TUI writes that line for you.
+
+**Build theme (Claude session)** opens an interactive `claude` session pointed at
+a new file in the gitignored `zsh/themes/local/`. You design it back-and-forth —
+Claude edits the file, you preview and ask for changes — then `dot` applies it on
+exit. Keep refining by reopening the session, or **promote** a favorite into the
+committed `zsh/themes/` set.
 
 ### `sim`
 

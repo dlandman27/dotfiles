@@ -113,78 +113,92 @@ theme_select() {
   themes="$(list_themes)"
   echo "${c_dim}  current: ${c_green}${current}${c_reset}"
   echo
-  choice="$(printf '%s\n' $themes | choose --header "Pick a theme:")" || return 0
-  [ -n "${choice:-}" ] || return 0
-  echo; echo "${c_accent}  preview:${c_reset}"; echo
-  render_prompt "$choice" | sed 's/^/    /'
-  echo
-  if gum confirm "Set theme to '$choice'?"; then
+  if command -v fzf &>/dev/null; then
+    # Live preview: fzf re-execs this script to render each highlighted theme.
+    choice="$(printf '%s\n' $themes | fzf --ansi --reverse --height=90% \
+      --header="↑↓ to preview · enter to apply · esc to cancel" \
+      --preview="bash '$DOTFILES/bin/dot' __render_theme {}" \
+      --preview-window=down:6:wrap)" || return 0
+    [ -n "${choice:-}" ] || return 0
     settings_set DOTFILES_THEME "$choice"
-    echo "${c_green}  set. run 'zrestart' or open a new shell to see it.${c_reset}"
+    echo "${c_green}  set to '$choice'. run 'zrestart' or open a new shell.${c_reset}"
+  else
+    choice="$(printf '%s\n' $themes | choose --header "Pick a theme (install fzf for live preview):")" || return 0
+    [ -n "${choice:-}" ] || return 0
+    echo; echo "${c_accent}  preview:${c_reset}"; echo
+    render_prompt "$choice" | sed 's/^/    /'
+    echo
+    if gum confirm "Set theme to '$choice'?"; then
+      settings_set DOTFILES_THEME "$choice"
+      echo "${c_green}  set. run 'zrestart' or open a new shell to see it.${c_reset}"
+    fi
   fi
   pause
 }
 
-AI_THEME_PROMPT='Write a zsh prompt theme as a self-contained snippet. Requirements:
+AI_THEME_CONTRACT='Theme contract (keep the file valid against this):
 - Set the PROMPT variable (and optionally RPROMPT). prompt_subst is enabled.
 - Use zsh prompt escapes: %F{color}...%f for color (0-255), %~ cwd, %c basename, %n user, %m host, %# prompt char, %(?.OK.FAIL) for exit status, %* time.
-- For the git branch, reference ${vcs_info_msg_0_} in PROMPT. To style it, set: zstyle '\''0:vcs_info:git:*'\'' formats '\''...'\'' (use %b for branch name).
+- For the git branch, reference ${vcs_info_msg_0_} in PROMPT. To style it, set the format with: zstyle :vcs_info:git:* formats (use %b for the branch name).
 - Do NOT call vcs_info, do NOT define precmd, do NOT autoload anything — the loader handles that.
-- Output ONLY the snippet (a few lines). No code fences, no commentary, no explanation.'
+- The file is a self-contained snippet (a few lines). No code fences.'
 
 theme_ai() {
   section "$ACCENT" " Build a theme with Claude"
   if ! command -v claude &>/dev/null; then
     echo "${c_warn}  claude CLI not found. Install Claude Code first.${c_reset}"; pause; return 0
   fi
-  local name instruction out content prev="" prompt action
+  local name desc out seed action
   name="$(gum input --placeholder "theme name (e.g. sunset)")" || return 0
   name="$(printf '%s' "$name" | tr ' ' '-' | tr -cd 'a-zA-Z0-9_-')"
   [ -n "$name" ] || { echo "  need a name."; pause; return 0; }
-  instruction="$(gum write --placeholder "Describe the prompt you want (colors, layout, symbols, one/two-line)...")" || return 0
-  [ -n "$instruction" ] || { echo "  need a description."; pause; return 0; }
+  desc="$(gum write --placeholder "Describe the vibe to start — you'll refine it live with Claude...")" || desc=""
 
   mkdir -p "$LOCAL_THEMES"
   out="$LOCAL_THEMES/$name.zsh"
 
-  # Build it iteratively: generate, render a live preview, then refine with
-  # follow-up instructions (each pass sees the current theme) until you're happy.
+  # Open an interactive Claude session pointed at the theme file. You converse
+  # back-and-forth; Claude writes/edits the file directly. On exit, dot picks
+  # up the result and you can apply it (or reopen the session to keep going).
   while true; do
-    if [ -z "$prev" ]; then
-      prompt="$AI_THEME_PROMPT
+    seed="I'm building a zsh prompt theme interactively with you. Create and iterate the theme in this exact file:
+$out
 
-DESCRIPTION: $instruction"
-    else
-      prompt="$AI_THEME_PROMPT
+$AI_THEME_CONTRACT
 
-This is the current theme:
-$prev
+How to work with me:
+1. Write the theme to the file above using your editing tools.
+2. After each change, preview it by running this and showing me the output:
+   bash '$DOTFILES/bin/dot' __render_theme $name
+3. Ask what I want to change and keep iterating until I'm happy, then I'll exit.
 
-Apply this change and output the full updated theme: $instruction"
+My starting idea: ${desc:-(none yet — please ask me what I want)}"
+
+    echo
+    echo "${c_dim}  Launching Claude. Build the theme together, then exit (Ctrl-D or /exit) to return here.${c_reset}"
+    echo
+    claude "$seed" || true
+
+    if [ ! -f "$out" ]; then
+      echo "${c_warn}  no theme file was created at themes/local/$name.zsh.${c_reset}"
+      if gum confirm "Reopen the Claude session?"; then desc=""; continue; else return 0; fi
     fi
-
-    content="$(gum spin --spinner dot --title "Claude is building '$name'..." --show-output -- \
-      claude -p "$prompt")" || { echo "${c_warn}  claude failed.${c_reset}"; pause; return 0; }
-    printf '# %s — AI-generated.\n%s\n' "$name" "$content" > "$out"
-    prev="$content"
 
     echo; echo "${c_accent}  preview:${c_reset}"; echo
     render_prompt "$name" | sed 's/^/    /'
     echo
     echo "${c_dim}  source:${c_reset}"
-    grep -v '^#' "$out" | sed 's/^/    /'
+    grep -v '^#' "$out" 2>/dev/null | sed 's/^/    /'
     echo
 
-    action="$(choose "Keep & apply" "Keep only" "Refine (describe a change)" "Discard")" || action="Discard"
+    action="$(choose "Keep & apply" "Keep only" "Reopen Claude session" "Discard")" || action="Keep only"
     case "$action" in
-      "Keep & apply") settings_set DOTFILES_THEME "$name"; echo "${c_green}  saved + applied. run 'zrestart'.${c_reset}"; break ;;
+      "Keep & apply") settings_set DOTFILES_THEME "$name"; echo "${c_green}  applied. run 'zrestart' or open a new shell.${c_reset}"; break ;;
       "Keep only")    echo "${c_green}  saved to themes/local/$name.zsh${c_reset}"; break ;;
-      "Refine"*)
-        instruction="$(gum write --placeholder "What should change? (e.g. 'make the path blue', 'put it on two lines')")" || instruction=""
-        [ -n "$instruction" ] || { echo "  no change given."; }
-        continue ;;
-      *) rm -f "$out"; echo "  discarded."; break ;;
+      "Reopen Claude session") desc=""; continue ;;
+      *) rm -f "$out"; echo "  discarded." ;;
     esac
+    break
   done
   pause
 }
@@ -225,10 +239,10 @@ customize_menu() {
   while true; do
     section "$ACCENT" " Customize"
     local c
-    c="$(choose "Prompt theme" "Generate theme (AI)" "Promote local theme" "Modules" "Back")" || return 0
+    c="$(choose "Prompt theme" "Build theme (Claude session)" "Promote local theme" "Modules" "Back")" || return 0
     case "$c" in
-      "Prompt theme")        theme_select ;;
-      "Generate theme (AI)") theme_ai ;;
+      "Prompt theme")                 theme_select ;;
+      "Build theme (Claude session)") theme_ai ;;
       "Promote local theme") theme_promote ;;
       "Modules")             modules_menu ;;
       *) return 0 ;;
@@ -292,7 +306,15 @@ cmd_definition() {
 browse_cmds() {
   local list="$1" pick name desc act
   while true; do
-    pick="$(printf '%s\n' "$list" | gum filter --placeholder "filter commands..." --header "Pick a command to see what it does")" || return 0
+    if command -v fzf &>/dev/null; then
+      # Live preview of what each command runs as you move the cursor.
+      pick="$(printf '%s\n' "$list" | fzf --ansi --reverse --height=90% \
+        --header="↑↓ to preview what it runs · enter to inspect · esc to exit" \
+        --preview="bash '$DOTFILES/bin/dot' __render_cmd {1}" \
+        --preview-window=down:6:wrap)" || return 0
+    else
+      pick="$(printf '%s\n' "$list" | gum filter --placeholder "filter commands..." --header "Pick a command to see what it does")" || return 0
+    fi
     [ -n "${pick:-}" ] || return 0
     name="${pick%% —*}"
     desc="${pick#*— }"
@@ -402,6 +424,12 @@ main_menu() {
 # Run the TUI only when executed directly — sourcing (e.g. tests) just loads
 # the functions above.
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  # Hidden subcommands the fzf preview window calls (it re-execs this script
+  # per highlighted row to render a live preview).
+  case "${1:-}" in
+    __render_theme) render_prompt "${2:-}"; exit 0 ;;
+    __render_cmd)   cmd_definition "${2:-}"; exit 0 ;;
+  esac
   if ! command -v gum &>/dev/null; then
     echo "dot requires gum (brew install gum)"
     exit 1

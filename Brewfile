@@ -5,7 +5,8 @@ brew "git"
 brew "gh"          # GitHub CLI — used by gprc
 
 # Shell tools
-brew "gum"                     # TUI toolkit — used by bin/sim
+brew "gum"                     # TUI toolkit — used by bin/sim and bin/dot
+brew "fzf"                     # fuzzy finder — powers live preview in `dot`
 brew "zsh-autosuggestions"     # fish-style as-you-type command suggestions
 brew "zsh-syntax-highlighting" # colorizes the command line as you type
 
