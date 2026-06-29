@@ -148,11 +148,26 @@ theme_ai() {
   if ! command -v claude &>/dev/null; then
     echo "${c_warn}  claude CLI not found. Install Claude Code first.${c_reset}"; pause; return 0
   fi
-  local name desc out seed action
+  local name desc out seed action components want=""
   name="$(gum input --placeholder "theme name (e.g. sunset)")" || return 0
   name="$(printf '%s' "$name" | tr ' ' '-' | tr -cd 'a-zA-Z0-9_-')"
   [ -n "$name" ] || { echo "  need a name."; pause; return 0; }
-  desc="$(gum write --placeholder "Describe the vibe to start — you'll refine it live with Claude...")" || desc=""
+
+  # Pick what the prompt should show — these become requirements for Claude.
+  components="$(gum choose --no-limit \
+    --header "What should the prompt show? (space to toggle · enter to confirm)" \
+    "git branch" \
+    "git status (dirty/clean)" \
+    "username" \
+    "computer name (host)" \
+    "current directory" \
+    "time / clock" \
+    "exit-status color" \
+    "two-line layout" \
+    "prompt symbol (❯/\$/%)")" || components=""
+  [ -n "$components" ] && want="$(printf '%s\n' "$components" | sed 's/^/- /')"
+
+  desc="$(gum write --placeholder "Anything else? colors, vibe, symbols... (optional)")" || desc=""
 
   mkdir -p "$LOCAL_THEMES"
   out="$LOCAL_THEMES/$name.zsh"
@@ -172,7 +187,10 @@ How to work with me:
    bash '$DOTFILES/bin/dot' __render_theme $name
 3. Ask what I want to change and keep iterating until I'm happy, then I'll exit.
 
-My starting idea: ${desc:-(none yet — please ask me what I want)}"
+${want:+Show exactly these elements in the prompt (leave out others unless I ask):
+$want
+
+}My starting idea: ${desc:-(none yet — please ask me what I want)}"
 
     echo
     echo "${c_dim}  Launching Claude. Build the theme together, then exit (Ctrl-D or /exit) to return here.${c_reset}"
