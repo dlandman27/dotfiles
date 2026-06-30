@@ -131,11 +131,11 @@ group "install.sh"
 ok "links configs into a sandbox HOME" bash -c '
   set -euo pipefail
   tmp="$(mktemp -d)"
-  HOME="$tmp" bash install.sh >/dev/null 2>&1
+  HOME="$tmp" DOTFILES_SKIP_TERMINAL=1 bash install.sh >/dev/null 2>&1
   [ -L "$tmp/.zshrc" ] && [ -L "$tmp/.gitconfig" ] && [ -L "$tmp/.gitignore_global" ]
   # backs up a pre-existing real file
   rm -f "$tmp/.zshrc"; echo real > "$tmp/.zshrc"
-  HOME="$tmp" bash install.sh >/dev/null 2>&1
+  HOME="$tmp" DOTFILES_SKIP_TERMINAL=1 bash install.sh >/dev/null 2>&1
   [ -f "$tmp/.zshrc.bak" ] && [ -L "$tmp/.zshrc" ]
   rm -rf "$tmp"'
 

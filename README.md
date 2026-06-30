@@ -32,6 +32,8 @@ zsh/
 git/
   .gitconfig        # user, push.autoSetupRemote, core.excludesfile, rebranch alias
   .gitignore_global # OS/editor cruft ignored in every repo
+terminal/
+  *.terminal        # exported Apple Terminal profiles (bg color, font, palette)
 bin/
   dot               # gum TUI control center (commands, customize, manage)
   sim               # gum TUI for managing iOS simulators / Android emulators
@@ -138,6 +140,19 @@ make test        # or ./tests/run.sh
 A zero-dependency bash suite covering script syntax, every prompt theme, the
 theme loader, the `dot` helper functions, `install.sh` symlinking, and git
 config.
+
+## Terminal appearance
+
+Prompt themes (above) style the *prompt line*. The terminal **window** itself —
+background color, font, the 16 ANSI colors, cursor — is owned by Apple Terminal,
+not the shell, and lives in an exported `*.terminal` profile under `terminal/`.
+
+1. In Terminal, set up the look you want under **Settings → Profiles**.
+2. Export it (gear ⚙️ → **Export…**) into `terminal/`, e.g. `terminal/Dylan.terminal`.
+3. `./install.sh` (macOS only) imports every `*.terminal` it finds and sets the
+   first as the default + startup profile. Restart Terminal to apply.
+
+See [`terminal/README.md`](terminal/README.md) for details.
 
 ## Local overrides
 
