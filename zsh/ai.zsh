@@ -113,6 +113,15 @@ explain() {
   printf '%s' "$input" | claude -p "Explain this command output or error in plain language: what it means and the most likely fix. Be concise."
 }
 
+# Single-key confirm that defaults to yes: Enter or y accepts, only n declines.
+# Usage: _confirm_default_yes "Prompt text"
+_confirm_default_yes() {
+  local reply
+  read -k 1 "reply?$1 [Y/n] "
+  [[ "$reply" != $'\n' ]] && echo
+  [[ "$reply" != [nN] ]]
+}
+
 # Draft a PR body with Claude from the diff + commits against a base branch.
 # Usage: _gprc_ai_body <base>   (prints the markdown body to stdout)
 _gprc_ai_body() {
@@ -158,8 +167,7 @@ gprc() {
       echo; return
     fi
     echo
-    if (( ! ai )) && read -q "?Draft the new body with Claude? [y/N] "; then ai=1; fi
-    echo
+    if (( ! ai )) && _confirm_default_yes "Draft the new body with Claude?"; then ai=1; fi
     if (( ! ai )); then
       gh pr edit
       return
@@ -171,8 +179,7 @@ gprc() {
 
   # Create a new PR.
   if (( ! ai )); then
-    if read -q "?Draft the PR body with Claude? [y/N] "; then ai=1; fi
-    echo
+    if _confirm_default_yes "Draft the PR body with Claude?"; then ai=1; fi
   fi
   if (( ! ai )); then
     gh pr create --base "$base"
