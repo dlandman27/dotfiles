@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ports — interactive TUI to search local listening ports, inspect the owning
+# process, and kill / open / copy via hotkeys. Sibling of bin/dot and bin/sim
+# (bash + fzf + gum). See docs/superpowers/specs/2026-09-22-ports-tui-design.md
+#
+# Sourcing this file (e.g. from tests) only loads the pure functions below; the
+# interactive TUI runs only when the script is executed directly.
+
+# Resolve the repo root from this script's real location (follow symlinks).
+SELF="${BASH_SOURCE[0]}"
+while [ -L "$SELF" ]; do
+  link="$(readlink "$SELF")"
+  case "$link" in
+    /*) SELF="$link" ;;
+    *)  SELF="$(dirname "$SELF")/$link" ;;
+  esac
+done
+DOTFILES="$(cd "$(dirname "$SELF")/.." && pwd)"
+
+# ── Theme (matches bin/dot) ───────────────────────────────────────
+DIM=240; WARN=214
+c_reset=$'\033[0m'
+c_dim=$'\033[38;5;240m'
+c_green=$'\033[38;5;78m'
+c_accent=$'\033[38;5;99m'
+c_warn=$'\033[38;5;214m'
+
+# Process names we consider "dev servers" — language runtimes, dev-server
+# tooling, and local datastores. Used by filter_dev.
+DEV_RE='node|python|ruby|deno|bun|next|vite|rails|puma|uvicorn|gunicorn|java|php|dotnet|cargo|air|ts-node|nodemon|webpack|esbuild|postgres|redis|mysqld|mariadb|mongod|memcached'
+
+# ── Pure helpers (sourceable, no lsof/fzf/gum needed) ─────────────
+
+# parse_lsof — read `lsof -F` output on stdin, emit one tab-separated row per
+# unique listening port: "port<TAB>proc<TAB>pid<TAB>name", sorted by port.
+parse_lsof() {
+  awk '
+    /^p/ { pid = substr($0, 2); next }
+    /^c/ { cmd = substr($0, 2); next }
+    /^n/ {
+      name = substr($0, 2)
+      port = name
+      sub(/.*:/, "", port)          # 127.0.0.1:3000 / [::1]:3000 / *:5000 -> 3000
+      if (port ~ /^[0-9]+$/)
+        print port "\t" cmd "\t" pid "\t" name
+    }
+  ' | sort -t$'\t' -k1,1n -u -k1,1
+}
+
+# filter_dev — read tab rows on stdin, keep only rows whose proc matches DEV_RE.
+filter_dev() {
+  awk -F'\t' -v re="$DEV_RE" 'tolower($2) ~ re'
+}
+
+# format_rows — read tab rows on stdin, print aligned columns for the fzf list.
+# Field 1 = port, field 3 = pid (fzf actions reference {1} and {3}).
+format_rows() {
+  while IFS=$'\t' read -r port proc pid name; do
+    printf '%-6s %-16.16s %-8s %s\n' "$port" "$proc" "$pid" "$name"
+  done
+}
+
+# ── Impure helpers (talk to the OS) ───────────────────────────────
+
+run_lsof() {
+  # +c0 = don't truncate the command name.
+  lsof +c0 -nP -iTCP -sTCP:LISTEN -Fpcn 2>/dev/null || true
+}
+
+# scan [--all] — the full listing pipeline that feeds fzf.
+scan() {
+  if [[ "${1:-}" == "--all" ]]; then
+    run_lsof | parse_lsof | format_rows
+  else
+    run_lsof | parse_lsof | filter_dev | format_rows
+  fi
+}
+
+# describe_port <port> — the fzf preview pane for the highlighted row.
+describe_port() {
+  local port="$1"
+  local pids; pids="$(lsof -ti tcp:"$port" 2>/dev/null || true)"
+  if [[ -z "$pids" ]]; then
+    printf '%s  nothing listening on %s\n' "$c_dim" "$port"
+    return
+  fi
+  local pid; pid="$(printf '%s\n' "$pids" | head -1)"
+  local cmd cwd up
+  cmd="$(ps -o command= -p "$pid" 2>/dev/null | sed 's/^ *//')"
+  up="$(ps -o etime= -p "$pid" 2>/dev/null | sed 's/^ *//')"
+  cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | awk '/^n/{print substr($0,2); exit}')"
+  cwd="${cwd/#$HOME/\~}"
+
+  printf '%sPORT%s    %s\n'   "$c_accent" "$c_reset" "$port"
+  printf '%sPID%s     %s%s\n' "$c_accent" "$c_reset" "$pid" \
+    "$([[ $(printf '%s\n' "$pids" | wc -l) -gt 1 ]] && printf ' %s(+%s more)%s' "$c_dim" "$(( $(printf '%s\n' "$pids" | wc -l) - 1 ))" "$c_reset")"
+  printf '%sCMD%s     %s\n'   "$c_accent" "$c_reset" "${cmd:-?}"
+  printf '%sCWD%s     %s\n'   "$c_accent" "$c_reset" "${cwd:-?}"
+  printf '%sUPTIME%s  %s\n'   "$c_accent" "$c_reset" "${up:-?}"
+  printf '%sURL%s     %shttp://localhost:%s%s\n' "$c_accent" "$c_reset" "$c_green" "$port" "$c_reset"
+}
+
+# kill_port <port> — SIGTERM, then SIGKILL anything still holding the port.
+kill_port() {
+  local port="$1"
+  local pids; pids="$(lsof -ti tcp:"$port" 2>/dev/null || true)"
+  if [[ -z "$pids" ]]; then
+    echo "nothing listening on port $port"
+    return 1
+  fi
+  # shellcheck disable=SC2086
+  kill $pids 2>/dev/null || true
+  sleep 0.3
+  local left; left="$(lsof -ti tcp:"$port" 2>/dev/null || true)"
+  # shellcheck disable=SC2086
+  [[ -n "$left" ]] && kill -9 $left 2>/dev/null || true
+  echo "killed port $port ($(printf '%s' "$pids" | tr '\n' ' '))"
+}
+
+# kill_confirm <port> — gum-confirmed kill, used by the ctrl-k binding.
+kill_confirm() {
+  local port="$1"
+  local who; who="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | awk 'NR==2{print $1" (pid "$2")"}')"
+  if gum confirm --prompt.foreground "$WARN" "  Kill $port — ${who:-unknown}?"; then
+    kill_port "$port" >/dev/null
+  fi
+}
+
+# ── Toggle state (dev-only ⇄ all), shared with fzf child processes ─
+current_mode() { cat "${PORTS_STATE:-/dev/null}" 2>/dev/null || echo dev; }
+toggle_mode() {
+  [[ -n "${PORTS_STATE:-}" ]] || return 0
+  if [[ "$(current_mode)" == all ]]; then echo dev >"$PORTS_STATE"; else echo all >"$PORTS_STATE"; fi
+}
+scan_mode() { [[ "$(current_mode)" == all ]] && scan --all || scan; }
+
+# ── Interactive TUI ───────────────────────────────────────────────
+main() {
+  for dep in fzf gum lsof; do
+    command -v "$dep" &>/dev/null || { echo "ports requires $dep (brew install $dep)"; exit 1; }
+  done
+
+  PORTS_STATE="$(mktemp -t ports.XXXXXX)"; export PORTS_STATE
+  echo dev >"$PORTS_STATE"
+  trap 'rm -f "$PORTS_STATE"' EXIT
+
+  local self="$DOTFILES/bin/ports"
+  scan_mode | fzf --ansi --reverse --height=100% --no-multi \
+    --header=$'enter open · ^k kill · ^y copy url · ^p copy pid · ^d dev/all · ^r refresh · esc quit' \
+    --prompt='port> ' \
+    --preview="bash '$self' __describe {1}" \
+    --preview-window=right:50%:wrap \
+    --bind="enter:execute-silent(open http://localhost:{1})" \
+    --bind="ctrl-y:execute-silent(printf 'http://localhost:%s' {1} | pbcopy)" \
+    --bind="ctrl-p:execute-silent(printf '%s' {3} | pbcopy)" \
+    --bind="ctrl-k:execute(bash '$self' __killconfirm {1})+reload(bash '$self' __scan)" \
+    --bind="ctrl-r:reload(bash '$self' __scan)" \
+    --bind="ctrl-d:execute-silent(bash '$self' __toggle)+reload(bash '$self' __scan)" \
+    --bind="q:abort" || true
+}
+
+# Run the TUI only when executed directly. Sourcing loads the functions above.
+# The __-prefixed subcommands are re-entry points that fzf's preview/bindings
+# call per keystroke (fzf children inherit PORTS_STATE via the environment).
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  case "${1:-}" in
+    __describe)    describe_port "${2:-}"; exit 0 ;;
+    __scan)        scan_mode;              exit 0 ;;
+    __kill)        kill_port "${2:-}";     exit $? ;;
+    __killconfirm) kill_confirm "${2:-}";  exit 0 ;;
+    __toggle)      toggle_mode;            exit 0 ;;
+  esac
+  main
+fi

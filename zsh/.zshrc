@@ -8,6 +8,9 @@ source ~/dotfiles/zsh/history.zsh
 # Aliases
 source ~/dotfiles/zsh/aliases.zsh
 
+# Port helpers (killport; the `ports` TUI lives in bin/)
+source ~/dotfiles/zsh/ports.zsh
+
 # AI helpers (gcai, ask, greview, explain)
 source ~/dotfiles/zsh/ai.zsh
 

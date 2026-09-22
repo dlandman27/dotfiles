@@ -101,5 +101,7 @@ function zhelp() {
   echo "  ${cmd}restart${reset}      Restart the shell (exec zsh)"
   echo "  ${cmd}zhelp${reset}        Show this help menu"
   echo "  ${cmd}sim${reset}          Manage iOS/Android simulators"
+  echo "  ${cmd}ports${reset}        Interactive TUI: search listening ports, inspect/kill/open"
+  echo "  ${cmd}killport${reset}     Kill whatever is listening on a port: killport <port>"
   echo ""
 }

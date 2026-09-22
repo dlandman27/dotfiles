@@ -54,11 +54,12 @@ group "shell-script syntax"
 ok "install.sh parses"   bash -n install.sh
 ok "bin/dot parses"      bash -n bin/dot
 ok "bin/sim parses"      bash -n bin/sim
+ok "bin/ports parses"    bash -n bin/ports
 ok "tests/run.sh parses" bash -n tests/run.sh
 
 if have zsh; then
   group "zsh module syntax"
-  for f in zsh/.zshrc zsh/history.zsh zsh/aliases.zsh zsh/ai.zsh zsh/theme.zsh; do
+  for f in zsh/.zshrc zsh/history.zsh zsh/aliases.zsh zsh/ai.zsh zsh/theme.zsh zsh/ports.zsh; do
     ok "zsh -n $f" zsh -n "$f"
   done
 else
@@ -124,6 +125,39 @@ if have zsh; then
   # fzf preview hooks: the script re-execs itself to render a row.
   ok "__render_theme prints a prompt" bash -c '[ -n "$(bash bin/dot __render_theme minimal)" ]'
   contains "__render_cmd resolves a command" "git status" bash bin/dot __render_cmd gst
+fi
+
+# ── ports TUI helpers (sourced, no lsof/fzf/gum needed) ───────────
+group "ports helpers"
+ok "bin/ports is executable" test -x bin/ports
+
+contains "parse_lsof extracts the port from lsof -F output" "3000" bash -c '
+  source bin/ports
+  printf "p123\ncnode\nn127.0.0.1:3000\n" | parse_lsof'
+
+ok "parse_lsof dedupes v4/v6 and sorts by port" bash -c '
+  set -euo pipefail
+  source bin/ports
+  out="$(printf "p1\ncnode\nn127.0.0.1:8080\np1\ncnode\nn[::1]:8080\np2\ncvite\nn*:3000\n" | parse_lsof)"
+  [ "$(printf "%s\n" "$out" | wc -l | tr -d " ")" -eq 2 ]
+  [ "$(printf "%s\n" "$out" | head -1 | cut -f1)" = "3000" ]'
+
+ok "filter_dev keeps dev procs and drops desktop apps" bash -c '
+  set -euo pipefail
+  source bin/ports
+  out="$(printf "3000\tnode\t1\n5432\tpostgres\t2\n57621\tSpotify\t3\n" | filter_dev)"
+  printf "%s" "$out" | grep -qi node
+  printf "%s" "$out" | grep -qi postgres
+  ! printf "%s" "$out" | grep -qi spotify'
+
+contains "format_rows prints the port first" "3000" bash -c '
+  source bin/ports
+  printf "3000\tnode\t123\t127.0.0.1:3000\n" | format_rows'
+
+if have zsh; then
+  ok "killport() defined" zsh -fc 'source zsh/ports.zsh; typeset -f killport >/dev/null'
+  contains "zhelp lists the ports TUI" "Interactive TUI" \
+    zsh -fc 'source zsh/aliases.zsh; zhelp'
 fi
 
 # ── install.sh symlinking (sandboxed HOME) ────────────────────────
